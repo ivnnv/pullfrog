@@ -47,6 +47,7 @@ import {
   autoSelectModel,
   buildReviewerAgentConfig,
   geminiHighThinkingOverrides,
+  qwenProviderConfig,
   installOpencodeCli,
   type OpenCodeConfig,
 } from "./opencodeShared.ts";
@@ -90,13 +91,6 @@ const installCli = () => installOpencodeCli({ binPath: "bin/opencode" });
 // on merge in session/llm.ts), so the env var is the only working knob.
 
 function buildSecurityConfig(ctx: AgentRunContext, model: string | undefined): string {
-  const qwenApiKey =
-    process.env.QWEN_API_KEY ?? process.env.DASHSCOPE_API_KEY ?? process.env.LLM_API_KEY;
-  const qwenBaseUrl =
-    process.env.QWEN_BASE_URL ??
-    process.env.DASHSCOPE_BASE_URL ??
-    process.env.LLM_BASE_URL ??
-    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
   const config: OpenCodeConfig = {
     permission: {
       bash: "deny",
@@ -138,19 +132,7 @@ function buildSecurityConfig(ctx: AgentRunContext, model: string | undefined): s
     // effort set elsewhere (gpt: upstream default, anthropic: --effort flag in claude.ts).
     provider: {
       google: { models: geminiHighThinkingOverrides() },
-      qwen: {
-        npm: "@ai-sdk/openai-compatible",
-        name: "Qwen",
-        options: {
-          baseURL: qwenBaseUrl,
-          ...(qwenApiKey ? { apiKey: qwenApiKey } : {}),
-        },
-        models: {
-          "qwen3-coder-plus": { name: "Qwen3 Coder Plus" },
-          "qwen-plus": { name: "Qwen Plus" },
-          "qwen-max": { name: "Qwen Max" },
-        },
-      },
+      qwen: qwenProviderConfig(),
     },
   };
 
