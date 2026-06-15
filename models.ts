@@ -309,6 +309,14 @@ export const providers = {
         openRouterResolve: "openrouter/qwen/qwen3-max",
         byok: true,
       },
+      "qwen-flash": {
+        displayName: "Qwen Flash",
+        // cheapest tier, its own free-quota bucket. Used when qwen-plus free
+        // quota is spent and we dont want to pay yet.
+        resolve: "qwen/qwen-flash",
+        openRouterResolve: "openrouter/qwen/qwen-flash",
+        byok: true,
+      },
     },
   }),
   opencode: provider({
