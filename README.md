@@ -35,7 +35,7 @@ Pullfrog is a GitHub bot that brings the full power of your favorite coding agen
 Pullfrog is the bridge between your preferred coding agents and GitHub. Use it for:
 
 - **🤖 Coding tasks** — Tell `@pullfrog` to implement something and it'll spin up a PR. If CI fails, it'll read the logs and attempt a fix automatically. It'll automatically address any PR reviews too.
-- **🔍 PR review** — Coding agents are great at reviewing PRs. Using the "PR created" trigger, you can configure Pullfrog to auto-review new PRs.
+- **🔍 PR review** — Coding agents are great at reviewing PRs. Using the "PR created" trigger, you can configure Pullfrog to auto-review new PRs. Add a `.pullfrogignore` file (same syntax as `.gitignore`) at your repo root to exclude vendored trees, generated bundles, or lockfiles from review. Matching files are dropped from the diff before the reviewer reads them, so large vendor/sync PRs don't spend the model's context on code nobody reviews.
 - **🤙 Issue management** — Via the "issue created" trigger, Pullfrog can automatically respond to common questions, create implementation plans, and link to related issues/PRs. Or (if you're feeling lucky) you can prompt it to immediately attempt a PR addressing new issues.
 - **Literally whatever** — Want to have the agent automatically add docs to all new PRs? Cut a new release with agent-written notes on every commit to `main`? Pullfrog lets you do it.
 

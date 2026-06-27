@@ -7,6 +7,7 @@ import { log } from "../utils/cli.ts";
 import { countLines, createDiffCoverageState } from "../utils/diffCoverage.ts";
 import { $git, $gitFetchWithDeepen } from "../utils/gitAuth.ts";
 import { executeLifecycleHook } from "../utils/lifecycle.ts";
+import { makeIgnoreMatcher, parsePullfrogIgnore } from "../utils/pathIgnore.ts";
 import { computeIncrementalDiff } from "../utils/rangeDiff.ts";
 import { retry } from "../utils/retry.ts";
 import { $ } from "../utils/shell.ts";
@@ -172,9 +173,38 @@ export type CheckoutPrResult = {
  * fetches PR files from GitHub and formats them with line numbers and TOC.
  * this is the core diff formatting logic, extracted for testability.
  */
+// reads `.pullfrogignore` from the BASE ref (not the PR head) so a PR can't add
+// ignore rules to hide its own files from review. missing file is the common
+// case and returns no patterns; any other read error is logged and ignored so a
+// flaky contents call never blocks a review.
+async function loadIgnorePatterns(
+  ctx: ToolContext,
+  baseRef: string
+): Promise<string[]> {
+  try {
+    const res = await ctx.octokit.rest.repos.getContent({
+      owner: ctx.repo.owner,
+      repo: ctx.repo.name,
+      path: ".pullfrogignore",
+      ref: baseRef,
+    });
+    const data = res.data;
+    if (Array.isArray(data) || data.type !== "file" || !data.content) return [];
+    const text = Buffer.from(data.content, "base64").toString("utf8");
+    return parsePullfrogIgnore(text);
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status !== 404) {
+      log.warning(`» .pullfrogignore lookup failed (${status ?? "unknown"}); reviewing all files`);
+    }
+    return [];
+  }
+}
+
 export async function fetchAndFormatPrDiff(
   ctx: ToolContext,
-  pullNumber: number
+  pullNumber: number,
+  baseRef: string
 ): Promise<FetchAndFormatPrDiffResult> {
   const files = await ctx.octokit.paginate(ctx.octokit.rest.pulls.listFiles, {
     owner: ctx.repo.owner,
@@ -182,7 +212,23 @@ export async function fetchAndFormatPrDiff(
     pull_number: pullNumber,
     per_page: 100,
   });
-  return { ...formatFilesWithLineNumbers(files), files };
+
+  // drop vendored/generated paths a repo opted out of via `.pullfrogignore`,
+  // before the diff is formatted — keeps large vendor/sync PRs from spending the
+  // model's input context on code nobody reviews. logged, never silent.
+  const ignorePatterns = await loadIgnorePatterns(ctx, baseRef);
+  if (ignorePatterns.length === 0) {
+    return { ...formatFilesWithLineNumbers(files), files };
+  }
+  const isIgnored = makeIgnoreMatcher(ignorePatterns);
+  const kept = files.filter((file) => !isIgnored(file.filename));
+  const dropped = files.length - kept.length;
+  if (dropped > 0) {
+    log.info(
+      `» .pullfrogignore: excluded ${dropped}/${files.length} changed file(s) from review (${ignorePatterns.length} pattern(s))`
+    );
+  }
+  return { ...formatFilesWithLineNumbers(kept), files: kept };
 }
 
 import { captureInitialHead, type GitContext } from "../utils/setup.ts";
@@ -696,7 +742,7 @@ export function CheckoutPrTool(ctx: ToolContext) {
     }
 
     // fetch PR files and format with line numbers
-    const formatResult = await fetchAndFormatPrDiff(ctx, pull_number);
+    const formatResult = await fetchAndFormatPrDiff(ctx, pull_number, pr.baseRef);
     const diffPreview = formatResult.content.split("\n").slice(0, 100).join("\n");
     log.debug(`formatted diff preview (first 100 lines):\n${diffPreview}`);
     const diffPath = join(tempDir, `pr-${pull_number}-${headShort}.diff`);
